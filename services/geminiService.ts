@@ -139,9 +139,6 @@ export const chatWithVideo = async (file: File, query: string, history: {role: s
     const ai = getAiClient();
     const base64Data = await fileToGenerativePart(file);
 
-    // We use a simplified approach here: Send the video with every request for context since we aren't maintaining persistent file handles in this frontend-only demo.
-    // In production, you'd upload via File API and use the file URI.
-    
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
@@ -162,6 +159,7 @@ export const chatWithVideo = async (file: File, query: string, history: {role: s
 // 4. Affiliate Ad Generator (The "Agent")
 export const generateAffiliateAd = async (): Promise<AdContent> => {
   const ai = getAiClient();
+  const YOUR_AMAZON_AFFILIATE_ID = "aivaultsai-20"; 
 
   // Pick a random niche to keep ads fresh
   const niches = [
@@ -170,7 +168,9 @@ export const generateAffiliateAd = async (): Promise<AdContent> => {
     "4K Webcams",
     "AI Video Editing Software",
     "Noise Cancelling Headphones",
-    "Smartphone Gimbals"
+    "Smartphone Gimbals",
+    "Green Screens for Streaming",
+    "Podcast Equipment Bundles"
   ];
   const randomNiche = niches[Math.floor(Math.random() * niches.length)];
 
@@ -182,12 +182,13 @@ export const generateAffiliateAd = async (): Promise<AdContent> => {
     Create a catchy tagline and a short persuasive description.
     
     Return JSON format:
-    - sponsorName: Product Name
+    - sponsorName: Product Name (exact model name)
     - sponsorTagline: Short catchy hook
     - description: 1-2 sentences why a creator needs this.
     - ctaText: "Buy Now", "Get 20% Off", etc.
-    - affiliateLink: A placeholder link (e.g., "https://amazon.com/...")
     - themeColor: A hex color code matching the product vibe (e.g., #FF5500)
+
+    IMPORTANT: Do not generate an affiliateLink in the JSON. I will generate it programmatically.
   `;
 
   const schema: Schema = {
@@ -197,10 +198,9 @@ export const generateAffiliateAd = async (): Promise<AdContent> => {
       sponsorTagline: { type: Type.STRING },
       description: { type: Type.STRING },
       ctaText: { type: Type.STRING },
-      affiliateLink: { type: Type.STRING },
       themeColor: { type: Type.STRING },
     },
-    required: ["sponsorName", "sponsorTagline", "description", "ctaText", "affiliateLink", "themeColor"]
+    required: ["sponsorName", "sponsorTagline", "description", "ctaText", "themeColor"]
   };
 
   try {
@@ -218,21 +218,29 @@ export const generateAffiliateAd = async (): Promise<AdContent> => {
     if (!text) throw new Error("No ad generated");
     
     const adData = JSON.parse(text);
+
+    // Construct REAL Amazon Affiliate Link with your ID
+    // We use the Search URL method to ensure the link is always valid and 
+    // tracks to your ID regardless of specific product availability.
+    const query = encodeURIComponent(adData.sponsorName);
+    const realMoneyLink = `https://www.amazon.com/s?k=${query}&tag=${YOUR_AMAZON_AFFILIATE_ID}`;
+
     return {
       ...adData,
+      affiliateLink: realMoneyLink,
       id: Date.now().toString(),
       generatedAt: new Date().toISOString()
     };
   } catch (error) {
     console.error("Ad Generation Error:", error);
-    // Fallback ad
+    // Fallback ad with your specific link
     return {
       id: "fallback",
-      sponsorName: "AIVaults Premium",
-      sponsorTagline: "Unlock Unlimited Power",
-      description: "Upgrade your workflow with our premium tools.",
-      ctaText: "Learn More",
-      affiliateLink: "https://aivaults.ai",
+      sponsorName: "AIVaults Recommended Gear",
+      sponsorTagline: "Upgrade Your Studio",
+      description: "Check out our curated list of essential tools for content creators.",
+      ctaText: "View Gear",
+      affiliateLink: "https://www.amazon.com?&linkCode=ll2&tag=aivaultsai-20&linkId=3e91a71879b1273b3b901635a8796a15&language=en_US&ref_=as_li_ss_tl",
       themeColor: "#14b8a6",
       generatedAt: new Date().toISOString()
     };

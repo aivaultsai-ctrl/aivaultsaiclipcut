@@ -21,7 +21,6 @@ const ClipEngine: React.FC<ClipEngineProps> = ({ onSaveClip }) => {
   // Export Settings State
   const [exportRes, setExportRes] = useState<'720p' | '1080p' | '4k'>('1080p');
   const [includeCaptions, setIncludeCaptions] = useState(true);
-  const [showExportMenu, setShowExportMenu] = useState(false);
   
   // Ad State
   const [showAd, setShowAd] = useState(false);
@@ -33,7 +32,7 @@ const ClipEngine: React.FC<ClipEngineProps> = ({ onSaveClip }) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
-      if (selectedFile.size > 50 * 1024 * 1024) { // 50MB Limit for demo to avoid browser crash on base64
+      if (selectedFile.size > 50 * 1024 * 1024) { // 50MB Limit for demo
           setError("File size too large. Please upload videos under 50MB for this demo.");
           return;
       }
@@ -45,22 +44,18 @@ const ClipEngine: React.FC<ClipEngineProps> = ({ onSaveClip }) => {
     }
   };
 
-  // Triggered when user clicks "Auto-Generate Clips"
   const initiateAnalysis = () => {
     setPendingAction('ANALYZE');
     setShowAd(true);
-    // Start analysis immediately in background while Ad shows (Parallel Flow)
     executeAnalysis();
   };
 
-  // The actual logic
   const executeAnalysis = async () => {
     if (!file) return;
     setIsAnalyzing(true);
     setError(null);
     try {
       const results = await analyzeVideoForClips(file);
-      // Assign simple IDs if not present
       const formattedResults = results.map((r, idx) => ({ ...r, id: r.id || `clip-${idx}` }));
       setClips(formattedResults);
       if (formattedResults.length > 0) {
@@ -73,277 +68,188 @@ const ClipEngine: React.FC<ClipEngineProps> = ({ onSaveClip }) => {
     }
   };
 
-  const triggerExportFlow = () => {
-      setShowExportMenu(false);
+  const initiateExport = () => {
       setPendingAction('EXPORT');
-      setShowAd(true); // Show ad before downloading
+      setShowAd(true);
+  };
+
+  const executeExport = () => {
+      if (activeClip && onSaveClip) {
+          onSaveClip(activeClip, exportRes);
+          alert(`Saved "${activeClip.title}" to your library in ${exportRes}.`);
+      }
   };
 
   const handleAdComplete = () => {
       setShowAd(false);
-
-      // Only execute pending action for EXPORT (gated)
-      // For ANALYZE, it was already started in initiateAnalysis so we don't need to do anything here
+      // If exporting, do it now
       if (pendingAction === 'EXPORT') {
-          // In a real app, this would trigger the backend FFmpeg process
-          if (activeClip && onSaveClip) {
-              onSaveClip(activeClip, exportRes);
-          }
-          // Small delay to make the transition smooth
-          setTimeout(() => {
-              alert(`Export Complete!\nClip: "${activeClip?.title}"\nResolution: ${exportRes}\nCaptions: ${includeCaptions ? 'Yes' : 'No'}\n\n(Saved to Library)`);
-          }, 300);
+          executeExport();
       }
-      
+      // If analyzing, it runs in background, so we just close modal to reveal state
       setPendingAction(null);
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-20 md:pb-0">
+    <div className="flex flex-col h-[calc(100vh-8rem)] animate-in fade-in duration-500">
       <AdModal 
         isOpen={showAd} 
         onClose={() => setShowAd(false)} 
-        onComplete={handleAdComplete} 
+        onComplete={handleAdComplete}
         context={pendingAction || 'EXPORT'}
       />
 
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">Viral Clip Engine</h2>
-          <p className="text-dark-300 mt-1">AI-powered long-form to short-form video converter.</p>
-        </div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+         <div>
+            <h2 className="text-2xl font-bold text-white">Clip Engine</h2>
+            <p className="text-dark-400 text-sm">AI-powered long-form to short-form repurposing.</p>
+         </div>
+         {clips.length > 0 && (
+             <Button variant="outline" onClick={() => {setFile(null); setClips([]);}}>
+                <Upload size={16} className="mr-2" /> New Video
+             </Button>
+         )}
       </div>
 
-      {/* Upload Section */}
-      {!file ? (
-        <div 
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-dark-700 rounded-2xl p-8 md:p-12 flex flex-col items-center justify-center bg-dark-800/50 hover:bg-dark-800 hover:border-brand-500/50 transition-all cursor-pointer group"
-        >
-          <div className="p-4 bg-dark-700 rounded-full group-hover:bg-brand-900/30 group-hover:text-brand-400 transition-colors text-dark-300 mb-4">
-            <Upload size={32} />
-          </div>
-          <h3 className="text-xl font-semibold text-white mb-2">Upload Video</h3>
-          <p className="text-dark-400 text-center max-w-md">
-            Drag and drop MP4 files here, or click to browse. 
-            <br/><span className="text-xs text-dark-500">(Max 50MB for demo)</span>
-          </p>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileChange} 
-            accept="video/mp4,video/quicktime" 
-            className="hidden" 
-          />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* Left Column: Source & Clips List */}
-          <div className="lg:col-span-1 space-y-6">
-             {/* Mini Source Preview */}
-             <div className="bg-dark-800 p-4 rounded-xl border border-dark-700">
-                <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-dark-300">Source Video</span>
-                    <button onClick={() => { setFile(null); setClips([]); }} className="text-xs text-brand-400 hover:underline">Change</button>
+      {/* Main Content */}
+      <div className="flex-1 flex gap-6 overflow-hidden flex-col md:flex-row">
+        
+        {/* Upload State */}
+        {!file ? (
+             <div 
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 border-2 border-dashed border-dark-700 rounded-2xl flex flex-col items-center justify-center bg-dark-800/50 hover:bg-dark-800 hover:border-brand-500/50 transition-all cursor-pointer group"
+            >
+                <div className="p-6 bg-dark-700 rounded-full group-hover:bg-brand-900/30 group-hover:text-brand-400 transition-colors text-dark-300 mb-6">
+                    <Upload size={48} />
                 </div>
-                <div className="aspect-video bg-black rounded overflow-hidden opacity-50">
-                    {fileUrl && <video src={fileUrl} className="w-full h-full object-cover" />}
-                </div>
-                <div className="mt-4">
-                    {!isAnalyzing && clips.length === 0 && (
-                        <Button onClick={initiateAnalysis} className="w-full" size="lg">
-                            <Scissors className="w-4 h-4 mr-2" />
-                            Auto-Generate Clips
-                        </Button>
-                    )}
-                    {isAnalyzing && (
-                         <Button disabled className="w-full" size="lg" isLoading={true}>
-                            Processing...
-                        </Button>
-                    )}
-                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">Upload Long Video</h3>
+                <p className="text-dark-400 max-w-sm text-center mb-6">Drag & drop or click to upload. <br/> Supports MP4, MOV (Max 50MB)</p>
+                <Button variant="secondary" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>
+                    Select File
+                </Button>
                 {error && (
-                    <div className="mt-4 p-3 bg-red-900/20 border border-red-900/50 rounded-lg flex items-start gap-2 text-sm text-red-200">
-                        <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                        <p>{error}</p>
+                    <div className="mt-4 flex items-center gap-2 text-red-400 bg-red-900/20 px-4 py-2 rounded-lg">
+                        <AlertCircle size={16} /> <span className="text-sm">{error}</span>
                     </div>
                 )}
-             </div>
-
-             {/* Clips List */}
-             {clips.length > 0 && (
-                 <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-dark-400 uppercase tracking-wider">Generated Clips</h3>
-                    {clips.map((clip) => (
-                        <div 
-                            key={clip.id}
-                            onClick={() => setActiveClipId(clip.id)}
-                            className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                                activeClipId === clip.id 
-                                ? 'bg-brand-900/10 border-brand-500 ring-1 ring-brand-500' 
-                                : 'bg-dark-800 border-dark-700 hover:border-dark-600'
-                            }`}
-                        >
-                            <div className="flex justify-between items-start mb-2">
-                                <h4 className={`font-medium line-clamp-1 ${activeClipId === clip.id ? 'text-brand-300' : 'text-white'}`}>{clip.title}</h4>
-                                <span className="bg-dark-900 text-xs font-mono py-0.5 px-1.5 rounded text-dark-400">
-                                    {clip.startTime}-{clip.endTime}
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2 mb-2">
-                                <div className="h-1.5 flex-1 bg-dark-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-gradient-to-r from-brand-600 to-green-400" style={{ width: `${clip.viralityScore}%` }} />
-                                </div>
-                                <span className="text-xs font-bold text-brand-400">{clip.viralityScore}</span>
-                            </div>
-                            <p className="text-xs text-dark-400 line-clamp-2">{clip.reasoning}</p>
-                        </div>
-                    ))}
+                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="video/*" className="hidden" />
+            </div>
+        ) : clips.length === 0 ? (
+            // Analyze State
+            <div className="flex-1 flex flex-col items-center justify-center bg-dark-800 rounded-2xl border border-dark-700 p-8">
+                 <div className="w-full max-w-md aspect-video bg-black rounded-xl overflow-hidden mb-8 shadow-2xl relative">
+                     {fileUrl && <video src={fileUrl} className="w-full h-full object-contain" controls />}
                  </div>
-             )}
-          </div>
-
-          {/* Right Column: Editor / Preview */}
-          <div className="lg:col-span-2">
-            {clips.length > 0 && activeClip && fileUrl ? (
-                <div className="bg-dark-800 rounded-2xl border border-dark-700 overflow-hidden flex flex-col h-full min-h-[500px] lg:min-h-[600px]">
-                    <div className="p-4 md:p-6 border-b border-dark-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative z-20">
-                        <div>
-                            <h3 className="text-xl font-bold text-white line-clamp-1">{activeClip.title}</h3>
-                            <p className="text-sm text-dark-400 line-clamp-1">{activeClip.description}</p>
-                        </div>
-                        <div className="flex gap-2 relative w-full sm:w-auto">
-                            <Button variant="secondary" size="sm" className="flex-1 sm:flex-none">
-                                <Share2 className="w-4 h-4 mr-2" />
-                                Share
-                            </Button>
-                            
-                            {/* Export Menu */}
-                            <div className="relative flex-1 sm:flex-none">
-                                <Button 
-                                    size="sm" 
-                                    onClick={() => setShowExportMenu(!showExportMenu)}
-                                    className={`w-full ${showExportMenu ? 'ring-2 ring-brand-500 ring-offset-2 ring-offset-dark-800' : ''}`}
-                                >
-                                    <Download className="w-4 h-4 mr-2" />
-                                    Export
-                                </Button>
-
-                                {showExportMenu && (
-                                    <>
-                                        <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
-                                        <div className="absolute top-full right-0 mt-3 w-80 bg-dark-800 border border-dark-600 rounded-xl shadow-2xl p-5 z-20 animate-in fade-in zoom-in-95 duration-200">
-                                            <h4 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                                                <Settings className="w-4 h-4 text-brand-400" />
-                                                Export Settings
-                                            </h4>
-
-                                            {/* Preview Thumbnail in Export Menu */}
-                                            <div className="mb-5 bg-black/50 rounded-lg p-3 border border-dark-700">
-                                                <p className="text-xs text-dark-400 mb-2 uppercase tracking-wide font-medium">Preview Clip</p>
-                                                <div className="mx-auto w-24">
-                                                     <VideoPlayer 
-                                                        src={fileUrl}
-                                                        startTime={activeClip.startSeconds}
-                                                        endTime={activeClip.endSeconds}
-                                                        aspectRatio="portrait"
-                                                        autoPlay={true}
-                                                        className="aspect-[9/16] w-full rounded-md shadow-inner bg-black"
-                                                    />
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="space-y-5">
-                                                {/* Resolution */}
-                                                <div>
-                                                    <label className="text-xs font-medium text-dark-400 uppercase tracking-wider block mb-2">Resolution</label>
-                                                    <div className="grid grid-cols-3 gap-2">
-                                                        {(['720p', '1080p', '4k'] as const).map((res) => (
-                                                            <button 
-                                                                key={res}
-                                                                onClick={() => setExportRes(res)}
-                                                                className={`py-2 px-3 text-sm rounded-lg border transition-all flex items-center justify-center gap-2 ${
-                                                                    exportRes === res 
-                                                                    ? 'bg-brand-900/20 border-brand-500 text-brand-300' 
-                                                                    : 'bg-dark-900 border-dark-700 text-dark-400 hover:border-dark-500 hover:text-white'
-                                                                }`}
-                                                            >
-                                                                {res === '4k' ? '4K' : res}
-                                                                {exportRes === res && <Check size={14} />}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                                
-                                                {/* Captions Toggle */}
-                                                <div>
-                                                    <label className="text-xs font-medium text-dark-400 uppercase tracking-wider block mb-2">Captions</label>
-                                                    <button 
-                                                        onClick={() => setIncludeCaptions(!includeCaptions)}
-                                                        className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${
-                                                            includeCaptions
-                                                            ? 'bg-brand-900/20 border-brand-500/50' 
-                                                            : 'bg-dark-900 border-dark-700 hover:border-dark-600'
-                                                        }`}
-                                                    >
-                                                        <div className="flex flex-col items-start text-left">
-                                                            <span className={`text-sm font-medium ${includeCaptions ? 'text-brand-300' : 'text-dark-200'}`}>Burn-in Captions</span>
-                                                            <span className="text-[10px] text-dark-400">Overlay AI subtitles</span>
-                                                        </div>
-                                                        <div className={`w-11 h-6 rounded-full relative transition-colors border ${includeCaptions ? 'bg-brand-600 border-brand-500' : 'bg-dark-800 border-dark-600'}`}>
-                                                            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200 ${includeCaptions ? 'left-[24px]' : 'left-[2px]'}`} />
-                                                        </div>
-                                                    </button>
-                                                </div>
-
-                                                <div className="pt-2 border-t border-dark-700">
-                                                    <Button className="w-full" size="md" onClick={triggerExportFlow}>
-                                                        <Download className="w-4 h-4 mr-2" />
-                                                        Download {exportRes}
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </div>
+                 
+                 <div className="text-center space-y-6">
+                    <div>
+                        <h3 className="text-lg font-medium text-white mb-1">{file.name}</h3>
+                        <p className="text-dark-400 text-sm">Ready to analyze</p>
                     </div>
-                    
-                    <div className="flex-1 bg-dark-900/50 p-4 md:p-8 flex items-center justify-center relative">
-                        {/* 
-                           This player simulates the crop. In a real app, 
-                           the export button would trigger a backend FFMPEG job. 
-                        */}
-                        <VideoPlayer 
-                            src={fileUrl}
-                            startTime={activeClip.startSeconds}
-                            endTime={activeClip.endSeconds}
-                            aspectRatio="portrait"
-                            autoPlay={true}
-                        />
 
-                        {/* Simulated Captions Overlay */}
-                        {includeCaptions && (
-                            <div className="absolute bottom-20 left-0 right-0 text-center px-8 md:px-12 pointer-events-none animate-in fade-in duration-300">
-                                <span className="inline-block bg-black/50 text-white text-base md:text-lg font-bold px-2 py-1 rounded backdrop-blur-sm shadow-xl">
-                                    [AI Generated Captions Would Appear Here]
-                                </span>
-                            </div>
+                    <Button 
+                        size="lg" 
+                        onClick={initiateAnalysis} 
+                        isLoading={isAnalyzing}
+                        className="min-w-[200px]"
+                    >
+                        <Scissors className="mr-2" /> Find Viral Clips
+                    </Button>
+                    
+                     {error && (
+                        <div className="flex items-center gap-2 text-red-400 bg-red-900/20 px-4 py-2 rounded-lg justify-center">
+                            <AlertCircle size={16} /> <span className="text-sm">{error}</span>
+                        </div>
+                    )}
+                 </div>
+            </div>
+        ) : (
+            // Editor / Results State
+            <>
+                {/* Left: Video Player */}
+                <div className="flex-1 flex flex-col gap-4 min-w-0">
+                    <div className="flex-1 bg-black rounded-2xl overflow-hidden shadow-2xl relative border border-dark-700 flex items-center justify-center">
+                        {activeClip && fileUrl && (
+                             <VideoPlayer 
+                                key={activeClip.id}
+                                src={fileUrl} 
+                                startTime={activeClip.startSeconds}
+                                endTime={activeClip.endSeconds}
+                                aspectRatio="portrait"
+                                autoPlay={true}
+                                className="h-full w-auto aspect-[9/16]"
+                             />
                         )}
                     </div>
+                    {/* Controls */}
+                    <div className="bg-dark-800 p-4 rounded-xl border border-dark-700 flex justify-between items-center">
+                         <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 text-sm text-dark-300">
+                                <Settings size={16} />
+                                <span className="hidden md:inline">Export Settings:</span>
+                            </div>
+                            <div className="flex bg-dark-900 rounded-lg p-1 border border-dark-700">
+                                {(['720p', '1080p', '4k'] as const).map(res => (
+                                    <button
+                                        key={res}
+                                        onClick={() => setExportRes(res)}
+                                        className={`px-3 py-1 rounded text-xs font-medium transition-colors ${exportRes === res ? 'bg-brand-600 text-white shadow-sm' : 'text-dark-400 hover:text-white'}`}
+                                    >
+                                        {res}
+                                    </button>
+                                ))}
+                            </div>
+                            <button 
+                                onClick={() => setIncludeCaptions(!includeCaptions)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded text-xs font-medium border transition-colors ${includeCaptions ? 'bg-brand-900/20 border-brand-500/50 text-brand-400' : 'border-dark-600 text-dark-400'}`}
+                            >
+                                <Check size={12} className={includeCaptions ? 'opacity-100' : 'opacity-0'} /> Auto-Captions
+                            </button>
+                         </div>
+                         <Button onClick={initiateExport}>
+                            <Download size={18} className="mr-2" /> Export Clip
+                         </Button>
+                    </div>
                 </div>
-            ) : (
-                // Empty State for Right Column
-                <div className="h-full flex flex-col items-center justify-center text-dark-500 border border-dark-700 border-dashed rounded-2xl bg-dark-800/30 p-12 min-h-[400px]">
-                    <Play className="w-16 h-16 opacity-20 mb-4" />
-                    <p>Select a clip to preview and edit</p>
+
+                {/* Right: Clip List */}
+                <div className="w-80 flex flex-col bg-dark-800 rounded-2xl border border-dark-700 overflow-hidden">
+                    <div className="p-4 border-b border-dark-700 bg-dark-900/50">
+                        <h3 className="font-semibold text-white">Identified Clips</h3>
+                        <span className="text-xs text-dark-400">{clips.length} moments found</span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        {clips.map(clip => (
+                            <div 
+                                key={clip.id}
+                                onClick={() => setActiveClipId(clip.id)}
+                                className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                                    activeClipId === clip.id 
+                                    ? 'bg-brand-900/10 border-brand-500/50 shadow-md' 
+                                    : 'bg-dark-700/50 border-transparent hover:bg-dark-700'
+                                }`}
+                            >
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className={`text-xs font-bold px-2 py-1 rounded ${
+                                        clip.viralityScore > 80 ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'
+                                    }`}>
+                                        Score: {clip.viralityScore}
+                                    </span>
+                                    <span className="text-xs font-mono text-dark-400">{clip.startTime} - {clip.endTime}</span>
+                                </div>
+                                <h4 className={`text-sm font-medium mb-1 line-clamp-2 ${activeClipId === clip.id ? 'text-brand-100' : 'text-dark-200'}`}>
+                                    {clip.title}
+                                </h4>
+                                <p className="text-xs text-dark-400 line-clamp-2 mb-2">{clip.reasoning}</p>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-            )}
-          </div>
-        </div>
-      )}
+            </>
+        )}
+      </div>
     </div>
   );
 };

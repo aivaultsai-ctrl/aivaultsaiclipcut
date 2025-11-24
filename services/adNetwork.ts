@@ -2,6 +2,7 @@ import { AdContent } from "../types";
 import { generateAffiliateAd } from "./geminiService";
 
 const AD_STORAGE_KEY = "daily_ad_campaign";
+const AD_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 export const getDailyAd = async (): Promise<AdContent> => {
   // 1. Check Local Storage
@@ -10,20 +11,21 @@ export const getDailyAd = async (): Promise<AdContent> => {
   if (storedAd) {
     try {
       const ad: AdContent = JSON.parse(storedAd);
-      const generatedDate = new Date(ad.generatedAt);
-      const now = new Date();
+      const generatedTime = new Date(ad.generatedAt).getTime();
+      const now = new Date().getTime();
       
-      // Calculate hours difference
-      const diffTime = Math.abs(now.getTime() - generatedDate.getTime());
-      const diffHours = diffTime / (1000 * 60 * 60);
+      // Calculate age
+      const age = now - generatedTime;
 
       // If ad is less than 24 hours old, return it
-      if (diffHours < 24) {
-        console.log("Serving cached ad:", ad.sponsorName);
+      if (age < AD_EXPIRY_MS) {
+        console.log(`Serving cached ad: ${ad.sponsorName} (${(age / (1000 * 60 * 60)).toFixed(1)} hours old)`);
         return ad;
       }
+      
+      console.log("Cached ad expired (>24h). Refreshing campaign...");
     } catch (e) {
-      console.warn("Failed to parse stored ad", e);
+      console.warn("Failed to parse stored ad or invalid date", e);
     }
   }
 
@@ -32,22 +34,25 @@ export const getDailyAd = async (): Promise<AdContent> => {
   try {
     const newAd = await generateAffiliateAd();
     
-    // In a real scenario, here you would overwrite 'newAd.affiliateLink' 
-    // with your specific affiliate ID mapping logic.
-    // e.g., if (newAd.sponsorName.includes("DJI")) newAd.affiliateLink = "YOUR_DJI_LINK";
+    // Ensure timestamp is set to now
+    const adWithTimestamp = {
+        ...newAd,
+        generatedAt: new Date().toISOString()
+    };
     
-    localStorage.setItem(AD_STORAGE_KEY, JSON.stringify(newAd));
-    return newAd;
+    localStorage.setItem(AD_STORAGE_KEY, JSON.stringify(adWithTimestamp));
+    return adWithTimestamp;
   } catch (error) {
     console.error("Failed to generate ad", error);
-    // Return a safe fallback
+    // Return a safe fallback with your specific tracking link
     return {
       id: "default",
       sponsorName: "Creator Tools Pro",
       sponsorTagline: "Everything you need to grow",
       description: "Check out the latest gear for content creators.",
       ctaText: "View Offer",
-      affiliateLink: "#",
+      // Your specific fallback link ensures you monetize even on errors
+      affiliateLink: "https://www.amazon.com?&linkCode=ll2&tag=aivaultsai-20&linkId=3e91a71879b1273b3b901635a8796a15&language=en_US&ref_=as_li_ss_tl",
       themeColor: "#6366f1",
       generatedAt: new Date().toISOString()
     };
