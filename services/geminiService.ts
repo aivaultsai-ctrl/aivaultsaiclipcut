@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
-import { VideoClip, ViralScoreResult } from "../types";
+import { VideoClip, ViralScoreResult, AdContent } from "../types";
 
 // Helper to convert File to Base64
 export const fileToGenerativePart = async (file: File): Promise<string> => {
@@ -158,3 +158,83 @@ export const chatWithVideo = async (file: File, query: string, history: {role: s
         return "Sorry, I encountered an error analyzing the video.";
     }
 }
+
+// 4. Affiliate Ad Generator (The "Agent")
+export const generateAffiliateAd = async (): Promise<AdContent> => {
+  const ai = getAiClient();
+
+  // Pick a random niche to keep ads fresh
+  const niches = [
+    "Wireless Microphones for Creators",
+    "RGB Ring Lights",
+    "4K Webcams",
+    "AI Video Editing Software",
+    "Noise Cancelling Headphones",
+    "Smartphone Gimbals"
+  ];
+  const randomNiche = niches[Math.floor(Math.random() * niches.length)];
+
+  const prompt = `
+    You are a marketing expert maximizing affiliate revenue.
+    Generate a high-converting, realistic ad for a top-tier product in the category: "${randomNiche}".
+    
+    The product should be a real, popular item (e.g. DJI Mic 2, Elgato Key Light, Sony ZV-E10).
+    Create a catchy tagline and a short persuasive description.
+    
+    Return JSON format:
+    - sponsorName: Product Name
+    - sponsorTagline: Short catchy hook
+    - description: 1-2 sentences why a creator needs this.
+    - ctaText: "Buy Now", "Get 20% Off", etc.
+    - affiliateLink: A placeholder link (e.g., "https://amazon.com/...")
+    - themeColor: A hex color code matching the product vibe (e.g., #FF5500)
+  `;
+
+  const schema: Schema = {
+    type: Type.OBJECT,
+    properties: {
+      sponsorName: { type: Type.STRING },
+      sponsorTagline: { type: Type.STRING },
+      description: { type: Type.STRING },
+      ctaText: { type: Type.STRING },
+      affiliateLink: { type: Type.STRING },
+      themeColor: { type: Type.STRING },
+    },
+    required: ["sponsorName", "sponsorTagline", "description", "ctaText", "affiliateLink", "themeColor"]
+  };
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: { text: prompt },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: schema,
+        temperature: 0.7,
+      }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("No ad generated");
+    
+    const adData = JSON.parse(text);
+    return {
+      ...adData,
+      id: Date.now().toString(),
+      generatedAt: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error("Ad Generation Error:", error);
+    // Fallback ad
+    return {
+      id: "fallback",
+      sponsorName: "AIVaults Premium",
+      sponsorTagline: "Unlock Unlimited Power",
+      description: "Upgrade your workflow with our premium tools.",
+      ctaText: "Learn More",
+      affiliateLink: "https://aivaults.ai",
+      themeColor: "#14b8a6",
+      generatedAt: new Date().toISOString()
+    };
+  }
+};

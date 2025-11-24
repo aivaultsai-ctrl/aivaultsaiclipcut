@@ -39,3 +39,14 @@ export interface LibraryItem {
   thumbColor: string;
   resolution: string;
 }
+
+export interface AdContent {
+  id: string;
+  sponsorName: string;
+  sponsorTagline: string;
+  description: string; // Short persuasive text
+  ctaText: string;
+  affiliateLink: string;
+  themeColor: string; // Hex code for dynamic styling
+  generatedAt: string; // ISO Date
+}
